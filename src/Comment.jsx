@@ -45,16 +45,25 @@ var Comment = React.createClass({
   },
 
   componentDidUpdate(prevProps, prevState) {
-    if (!prevState.comment.id) {
+    // Huge, fast-growing threads like https://news.ycombinator.com/item?id=9784470
+    // seem to break the API - some comments are coming back from Firebase as null.
+    if (!this.state.comment) {
+      this.props.threadStore.adjustExpectedComments(-1)
+      return
+    }
+
+    // On !prevState.comment: a comment which was initially null - see
+    // above - may eventually load when the API catches up.
+    if (!prevState.comment || !prevState.comment.id) {
       // Register a newly-loaded comment with the thread store
       if (this.state.comment.id) {
-        // If the commant was delayed, cancel any pending timeout
-        if (prevState.comment.delayed) {
+        // If the comment was delayed, cancel any pending timeout
+        if (prevState.comment && prevState.comment.delayed) {
           this.clearDelayTimeout()
         }
         this.props.threadStore.commentAdded(this.state.comment)
       }
-      if (!prevState.comment.delayed && this.state.comment.delayed) {
+      if (prevState.comment && !prevState.comment.delayed && this.state.comment.delayed) {
         this.props.threadStore.commentDelayed(this.props.id)
       }
     }
@@ -87,8 +96,8 @@ var Comment = React.createClass({
 
   /**
    * This is usually caused by a permissions error loading the comment due to
-   * its author using the delay setting, which is measured in minutes - try
-   * again in 30 seconds.
+   * its author using the delay setting (note: this is conjecture), which is
+   * measured in minutes - try again in 30 seconds.
    */
   handleFirebaseRefCancelled(e) {
     if ("production" !== process.env.NODE_ENV) {
@@ -96,7 +105,7 @@ var Comment = React.createClass({
     }
     this.unbind('comment')
     this.timeout = setTimeout(this.bindFirebaseRef, 30000)
-    if (!this.state.comment.delayed) {
+    if (this.state.comment && !this.state.comment.delayed) {
       this.state.comment.delayed = true
       this.forceUpdate()
     }
@@ -117,6 +126,12 @@ var Comment = React.createClass({
   render() {
     var comment = this.state.comment
     var props = this.props
+    if (!comment) {
+      return this.renderError(comment, {
+        id: this.props.id,
+        className: 'Comment Comment--error Comment--level' + props.level
+      })
+    }
     // Render a placeholder while we're waiting for the comment to load
     if (!comment.id) { return this.renderCommentLoading(comment) }
     // Don't show dead coments or their children, when configured

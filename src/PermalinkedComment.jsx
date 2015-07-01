@@ -2,7 +2,6 @@
 
 var React = require('react')
 var ReactFireMixin = require('reactfire')
-var {Navigation} = require('react-router')
 
 var CommentThreadStore = require('./stores/CommentThreadStore')
 var HNService = require('./services/HNService')
@@ -16,11 +15,12 @@ var cx = require('./utils/buildClassName')
 var setTitle = require('./utils/setTitle')
 
 var PermalinkedComment = React.createClass({
-  mixins: [CommentMixin, ReactFireMixin, Navigation],
+  mixins: [CommentMixin, ReactFireMixin],
 
   getDefaultProps() {
     return {
-      level: 0
+      level: 0,
+      loadingSpinner: true
     }
   },
 
@@ -52,12 +52,16 @@ var PermalinkedComment = React.createClass({
   },
 
   componentWillUpdate(nextProps, nextState) {
+    if (!nextState.comment) {
+      return
+    }
+
     if (this.state.comment.id != nextState.comment.id) {
       if (!nextState.comment.deleted) {
         // Redirect to the appropriate route if a Comment "parent" link had a
         // non-comment item id.
         if (nextState.comment.type != 'comment') {
-          this.replaceWith(nextState.comment.type, {id: nextState.comment.id})
+          this.context.router.replaceWith(nextState.comment.type, {id: nextState.comment.id})
           return
         }
       }
@@ -95,6 +99,12 @@ var PermalinkedComment = React.createClass({
 
   render() {
     var comment = this.state.comment
+    if (!comment) {
+      return this.renderError(comment, {
+        id: this.props.params.id,
+        className: 'Comment Comment--level0 Comment--error'
+      })
+    }
     // Render a placeholder while we're waiting for the comment to load
     if (!comment.id) { return this.renderCommentLoading(comment) }
     // Render a link to HN for deleted comments
